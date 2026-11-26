@@ -1,0 +1,19 @@
+sample_type,reading_no,tds_in_voltage,tds_out_voltage,temperature,flow_rate,flow_source,source
+Normal water,1,1.214,0.144,24.81,2.05,simulated (healthy flow),Serial Monitor screenshot
+Normal water,2,1.215,0.142,24.69,1.98,simulated (healthy flow),Serial Monitor screenshot
+Normal water,3,1.213,0.142,24.50,1.86,simulated (healthy flow),Serial Monitor screenshot
+Normal water,4,1.214,0.144,24.44,1.74,simulated (healthy flow),Serial Monitor screenshot
+Normal water,5,1.214,0.144,24.31,1.62,simulated (healthy flow),Serial Monitor screenshot
+Normal water,6,1.213,0.149,24.25,1.51,simulated (healthy flow),Serial Monitor screenshot
+Normal water,7,1.210,0.145,24.25,1.48,simulated (healthy flow),Serial Monitor screenshot
+Normal water,8,1.213,0.143,24.19,1.42,simulated (healthy flow),Serial Monitor screenshot
+Water cooler water,1,1.213,0.150,31.12,1.38,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,2,1.215,0.150,31.37,1.25,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,3,1.211,0.154,31.81,1.10,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,4,1.215,0.149,31.94,0.97,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,5,1.215,0.152,32.06,0.92,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,6,1.211,0.154,32.25,0.87,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,7,1.214,0.149,32.44,0.81,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,8,1.215,0.147,32.56,0.70,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,9,1.214,0.148,32.63,0.55,simulated (progressive pre-filter clogging),Serial Monitor screenshot
+Water cooler water,10,1.214,0.149,32.69,0.36,simulated (progressive pre-filter clogging),Serial Monitor screenshot

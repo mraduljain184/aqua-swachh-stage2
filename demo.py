@@ -1,11 +1,12 @@
 """
-Aqua-Swachh: Stage 2 ML Pipeline Live Demonstration
+Aqua-Swachh: Stage 3 Prototype - ML Pipeline Live Demonstration
 ===================================================
 Demonstrates the full end-to-end pipeline:
 1. Loading or generating sensor dataset
 2. Physics feature processing
 3. Machine Learning model inference (Random Forest Classifier)
 4. Visual test console for simulated scenarios
+5. Real bench readings (raw TDS probe voltages, no flow sensor)
 """
 
 import os
@@ -23,16 +24,20 @@ if hasattr(sys.stderr, "reconfigure"):
 from data.generate_dataset import generate_water_sensor_dataset
 from model.train import train_and_evaluate
 from inference.predict import FilterHealthPredictor
+from model.sensor_calibration import prepare_sensor_frame
+
+REAL_DATA_PATH = "data/real_sensor_readings.csv"
 
 
 def run_demo():
     print("\n" + "=" * 70)
     print(" AQUA-SWACHH: SMART WATER PURIFIER PREDICTIVE MONITORING ")
-    print(" Stage 2 ML Prototype: Filter Condition Classification")
+    print(" Stage 3 Prototype: Filter Condition Classification")
     print("=" * 70)
     
     csv_path = "data/sensor_data.csv"
     model_path = "model/saved_models/random_forest_filter_model.joblib"
+    no_flow_model_path = "model/saved_models/random_forest_filter_model_no_flow.joblib"
     
     # 1. Dataset check
     if not os.path.exists(csv_path):
@@ -42,7 +47,7 @@ def run_demo():
         print(f"\n[Step 1] Sensor dataset located at: {csv_path}")
 
     # 2. Model training check
-    if not os.path.exists(model_path):
+    if not os.path.exists(model_path) or not os.path.exists(no_flow_model_path):
         print("\n[Step 2] Training ML model (Random Forest vs Linear Baseline)...")
         train_and_evaluate(data_path=csv_path, model_output_dir="model/saved_models")
     else:
@@ -124,6 +129,31 @@ def run_demo():
             print(f"    Safety Guardrail    : [ACTIVATED] {result['guardrail_reason']}")
         print(f"    System Action       : {result['action_recommendation']}")
         print("-" * 70)
+
+    run_real_data_section(predictor)
+
+
+def run_real_data_section(predictor: FilterHealthPredictor):
+    print("\n[Step 4] Real Bench Readings (ESP32 Serial Monitor, raw TDS voltage, no flow sensor):")
+    print("-" * 70)
+    if not os.path.exists(REAL_DATA_PATH):
+        print(f"    {REAL_DATA_PATH} not found - skipping.")
+        return
+
+    df = prepare_sensor_frame(pd.read_csv(REAL_DATA_PATH))
+    results = predictor.predict_batch(df)
+
+    for sample_type, grp in results.groupby('sample_type', sort=False):
+        status_counts = grp['predicted_status'].value_counts().to_dict()
+        print(f"\n>>> {sample_type} ({len(grp)} readings)")
+        print(f"    Avg probe voltage   : TDS1={grp['tds_in_voltage'].mean():.3f} V | TDS2={grp['tds_out_voltage'].mean():.3f} V")
+        print(f"    Converted (K=1.0)   : Feed TDS={grp['tds_in'].mean():.1f} ppm | Permeate TDS={grp['tds_out'].mean():.1f} ppm")
+        print(f"    Temperature         : {grp['temperature'].mean():.2f}°C (range {grp['temperature'].min():.2f}-{grp['temperature'].max():.2f})")
+        print(f"    Avg salt rejection  : {grp['salt_rejection_pct'].mean():.2f}%")
+        print(f"    Predictions         : {status_counts} (model: no_flow)")
+    print("\n    Note: probes are uncalibrated (K=1.0) and no flow meter is fitted, so these")
+    print("    results are indicative only; clogging cannot be detected without flow data.")
+    print("-" * 70)
 
 if __name__ == "__main__":
     run_demo()

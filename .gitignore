@@ -21,3 +21,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Live ESP32 serial logs
+data/esp32_live_log.csv

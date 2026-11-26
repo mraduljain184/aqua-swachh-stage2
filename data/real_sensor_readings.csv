@@ -1,0 +1,19 @@
+sample_type,reading_no,tds_in_voltage,tds_out_voltage,temperature,source
+Normal water,1,1.214,0.144,24.81,Serial Monitor screenshot
+Normal water,2,1.215,0.142,24.69,Serial Monitor screenshot
+Normal water,3,1.213,0.142,24.50,Serial Monitor screenshot
+Normal water,4,1.214,0.144,24.44,Serial Monitor screenshot
+Normal water,5,1.214,0.144,24.31,Serial Monitor screenshot
+Normal water,6,1.213,0.149,24.25,Serial Monitor screenshot
+Normal water,7,1.210,0.145,24.25,Serial Monitor screenshot
+Normal water,8,1.213,0.143,24.19,Serial Monitor screenshot
+Water cooler water,1,1.213,0.150,31.12,Serial Monitor screenshot
+Water cooler water,2,1.215,0.150,31.37,Serial Monitor screenshot
+Water cooler water,3,1.211,0.154,31.81,Serial Monitor screenshot
+Water cooler water,4,1.215,0.149,31.94,Serial Monitor screenshot
+Water cooler water,5,1.215,0.152,32.06,Serial Monitor screenshot
+Water cooler water,6,1.211,0.154,32.25,Serial Monitor screenshot
+Water cooler water,7,1.214,0.149,32.44,Serial Monitor screenshot
+Water cooler water,8,1.215,0.147,32.56,Serial Monitor screenshot
+Water cooler water,9,1.214,0.148,32.63,Serial Monitor screenshot
+Water cooler water,10,1.214,0.149,32.69,Serial Monitor screenshot

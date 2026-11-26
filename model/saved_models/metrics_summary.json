@@ -1,5 +1,6 @@
 {
   "best_model": "Random Forest Classifier (Primary Model)",
+  "uses_flow_rate": true,
   "feature_columns": [
     "tds_in",
     "tds_out",
@@ -39,7 +40,7 @@
     "flow_rejection_index": 0.3118557056317102,
     "temp_comp_rejection": 0.2774052706046931,
     "salt_rejection": 0.2192747528448485,
-    "flow_rate": 0.1247850481302309,
+    "flow_rate": 0.12478504813023088,
     "tds_out_norm_25c": 0.03842139365378786,
     "tds_out": 0.020973235372036193,
     "delta_tds": 0.003483942840279995,
@@ -64,6 +65,73 @@
       "cv_f1_std": 0.0,
       "test_accuracy": 1.0,
       "test_f1_macro": 1.0
+    }
+  },
+  "training_data": "sensor_data.csv",
+  "no_flow_model": {
+    "best_model": "Random Forest Classifier (Primary Model)",
+    "uses_flow_rate": false,
+    "feature_columns": [
+      "tds_in",
+      "tds_out",
+      "temperature",
+      "salt_rejection",
+      "delta_tds",
+      "tds_out_norm_25c",
+      "temp_comp_rejection"
+    ],
+    "classes": [
+      "Normal",
+      "Monitor",
+      "Service Required"
+    ],
+    "test_accuracy": 0.95,
+    "test_macro_f1": 0.9235084140744517,
+    "confusion_matrix": [
+      [
+        165,
+        0,
+        0
+      ],
+      [
+        0,
+        72,
+        3
+      ],
+      [
+        0,
+        12,
+        48
+      ]
+    ],
+    "feature_importances": {
+      "temp_comp_rejection": 0.3952435268948055,
+      "salt_rejection": 0.27667894116670333,
+      "tds_out_norm_25c": 0.15316326888321372,
+      "tds_out": 0.11772639561176443,
+      "delta_tds": 0.025741180200137794,
+      "tds_in": 0.01790115179729042,
+      "temperature": 0.01354553544608483
+    },
+    "comparison": {
+      "Dummy (Majority Class Baseline)": {
+        "cv_f1_mean": 0.23655913978494625,
+        "cv_f1_std": 0.0,
+        "test_accuracy": 0.55,
+        "test_f1_macro": 0.23655913978494625
+      },
+      "Logistic Regression (Linear Baseline)": {
+        "cv_f1_mean": 0.9473107010928686,
+        "cv_f1_std": 0.01344277048302213,
+        "test_accuracy": 0.95,
+        "test_f1_macro": 0.9242636746143057
+      },
+      "Random Forest Classifier (Primary Model)": {
+        "cv_f1_mean": 0.9468153702114955,
+        "cv_f1_std": 0.012675662532587775,
+        "test_accuracy": 0.95,
+        "test_f1_macro": 0.9235084140744517
+      }
     }
   }
 }

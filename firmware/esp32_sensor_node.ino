@@ -3,57 +3,66 @@
   =========================================
   Target: ESP32-S3 DevKit
   Sensors:
-  - TDS In (Raw Water): Analog ADC (e.g. GPIO 1)
-  - TDS Out (Permeate): Analog ADC (e.g. GPIO 2)
-  - Temperature: DS18B20 1-Wire (e.g. GPIO 4)
-  - Flow Sensor: YF-S201 Hall-Effect (e.g. GPIO 5)
+  - TDS Sensor 1 (Feed / Raw Water): Analog ADC (GPIO 1)
+  - TDS Sensor 2 (Permeate):         Analog ADC (GPIO 2)
+  - Temperature: DS18B20 1-Wire (GPIO 4)
+  - Flow Sensor: YF-S201 Hall-Effect (GPIO 5) -- OPTIONAL, see FLOW_SENSOR_FITTED
 
-  Serial Output Format:
-  tds_in,tds_out,temperature,flow_rate
-  e.g.: 420.5,32.1,26.4,1.82
+  The TDS probes are sent as RAW VOLTAGE. Conversion to ppm (temperature
+  compensation + K-value calibration) is done on the PC side by
+  model/sensor_calibration.py, so the probes can be re-calibrated without
+  reflashing this firmware.
+
+  Serial Output Format (115200 baud, one line per second):
+    FLOW_SENSOR_FITTED = false : tds1_voltage,tds2_voltage,temperature
+                                 e.g. 1.214,0.144,24.81
+    FLOW_SENSOR_FITTED = true  : tds1_voltage,tds2_voltage,temperature,flow_rate
+                                 e.g. 1.214,0.144,24.81,1.85
 */
 
 #include <DallasTemperature.h>
 #include <OneWire.h>
 
+// --- Build options ---
+#define FLOW_SENSOR_FITTED false   // set true once the YF-S201 is installed
+
 // --- Pin Definitions ---
-const int PIN_TDS_IN = 1;   // ADC1 Channel for Feed TDS
-const int PIN_TDS_OUT = 2;  // ADC1 Channel for Permeate TDS
+const int PIN_TDS_IN = 1;   // ADC1 Channel for TDS Sensor 1 (feed)
+const int PIN_TDS_OUT = 2;  // ADC1 Channel for TDS Sensor 2 (permeate)
 const int PIN_ONE_WIRE = 4; // 1-Wire bus for DS18B20
 const int PIN_FLOW = 5;     // Interrupt pin for YF-S201 flow sensor
+
+// --- ADC averaging ---
+const int ADC_SAMPLES = 30;
 
 // --- Sensor Objects ---
 OneWire oneWire(PIN_ONE_WIRE);
 DallasTemperature tempSensors(&oneWire);
 
-// --- Flow Sensor Variables ---
+// --- Timing / Flow Sensor Variables ---
 volatile unsigned long pulseCount = 0;
-unsigned long lastFlowTime = 0;
+unsigned long lastSampleTime = 0;
 float flowRateLPM = 0.0;
 // YF-S201 calibration factor: ~7.5 pulses per second = 1 L/min
 const float FLOW_CALIBRATION_FACTOR = 7.5;
 
 void IRAM_ATTR pulseCounter() { pulseCount++; }
 
-// Helper: Convert ADC voltage to TDS (ppm) with temperature compensation
-float readTDS(int pin, float temperatureC) {
-  int analogVal = analogRead(pin);
-  // ESP32 ADC: 12-bit (0-4095) with reference voltage ~3.3V
-  float voltage = (analogVal / 4095.0) * 3.3;
-
-  // Standard Gravity TDS temperature compensation formula:
-  // V_comp = V / (1.0 + 0.02 * (T - 25.0))
-  float compensationCoefficient = 1.0 + 0.02 * (temperatureC - 25.0);
-  float compensationVoltage = voltage / compensationCoefficient;
-
-  // Typical empirical polynomial curve for analog TDS meters (Xcluma / Gravity)
-  float tdsValue =
-      (133.42 * pow(compensationVoltage, 3) -
-       255.86 * pow(compensationVoltage, 2) + 857.39 * compensationVoltage) *
-      0.5;
-  if (tdsValue < 0)
-    tdsValue = 0;
-  return tdsValue;
+// Read the TDS probe output voltage (V), median-trimmed average of ADC_SAMPLES.
+float readProbeVoltage(int pin) {
+  long sum = 0;
+  int minV = 4095, maxV = 0;
+  for (int i = 0; i < ADC_SAMPLES; i++) {
+    int v = analogRead(pin);
+    sum += v;
+    if (v < minV) minV = v;
+    if (v > maxV) maxV = v;
+    delay(2);
+  }
+  // Discard the highest and lowest outliers
+  float avg = (sum - minV - maxV) / float(ADC_SAMPLES - 2);
+  // ESP32 ADC: 12-bit (0-4095) with ~3.3 V full scale at 11 dB attenuation
+  return (avg / 4095.0) * 3.3;
 }
 
 void setup() {
@@ -63,10 +72,12 @@ void setup() {
   // Initialize DS18B20
   tempSensors.begin();
 
+#if FLOW_SENSOR_FITTED
   // Initialize Flow Sensor Interrupt
   pinMode(PIN_FLOW, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(PIN_FLOW), pulseCounter, FALLING);
-  lastFlowTime = millis();
+#endif
+  lastSampleTime = millis();
 
   // Configure ADC
   analogReadResolution(12);
@@ -77,16 +88,17 @@ void loop() {
   unsigned long now = millis();
 
   // Sample every 1000 ms (1 Hz)
-  if (now - lastFlowTime >= 1000) {
-    // 1. Calculate Flow Rate
+  if (now - lastSampleTime >= 1000) {
+    float dt = (now - lastSampleTime) / 1000.0;
+    lastSampleTime = now;
+
+#if FLOW_SENSOR_FITTED
+    // 1. Flow Rate: Q (L/min) = pulse frequency (Hz) / 7.5
     detachInterrupt(digitalPinToInterrupt(PIN_FLOW));
-    // flowRate (L/min) = (pulseCount / 7.5) * (1000 / dt_ms)
-    float dt = (now - lastFlowTime) / 1000.0;
-    flowRateLPM =
-        (pulseCount / (FLOW_CALIBRATION_FACTOR * dt)) / 60.0 * 60.0; // in L/min
+    flowRateLPM = (pulseCount / dt) / FLOW_CALIBRATION_FACTOR;
     pulseCount = 0;
-    lastFlowTime = now;
     attachInterrupt(digitalPinToInterrupt(PIN_FLOW), pulseCounter, FALLING);
+#endif
 
     // 2. Read Water Temperature
     tempSensors.requestTemperatures();
@@ -96,18 +108,21 @@ void loop() {
       waterTemp = 25.0; // Default reference
     }
 
-    // 3. Read TDS Sensors
-    float tdsIn = readTDS(PIN_TDS_IN, waterTemp);
-    float tdsOut = readTDS(PIN_TDS_OUT, waterTemp);
+    // 3. Read TDS probe voltages
+    float tds1V = readProbeVoltage(PIN_TDS_IN);
+    float tds2V = readProbeVoltage(PIN_TDS_OUT);
 
     // 4. Output CSV formatted stream over Serial
-    // Format: tds_in,tds_out,temperature,flow_rate
-    Serial.print(tdsIn, 1);
+    Serial.print(tds1V, 3);
     Serial.print(",");
-    Serial.print(tdsOut, 1);
+    Serial.print(tds2V, 3);
     Serial.print(",");
-    Serial.print(waterTemp, 1);
+#if FLOW_SENSOR_FITTED
+    Serial.print(waterTemp, 2);
     Serial.print(",");
     Serial.println(flowRateLPM, 2);
+#else
+    Serial.println(waterTemp, 2);
+#endif
   }
 }

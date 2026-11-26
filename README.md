@@ -5,10 +5,10 @@
 [![Scikit-Learn](https://img.shields.io/badge/scikit--learn-Random%20Forest-F7931E?logo=scikit-learn&logoColor=white)](https://scikit-learn.org)
 [![Hardware](https://img.shields.io/badge/Hardware-ESP32--S3-E7352C?logo=espressif&logoColor=white)](https://www.espressif.com/)
 [![Track](https://img.shields.io/badge/atomQUEST-Track%202%20%28RGIPT%29-0284c7)](https://rgipt.ac.in)
-[![Tests](https://img.shields.io/badge/Tests-16%20Passing-10b981?logo=checkmarx&logoColor=white)](tests/test_backend.py)
+[![Tests](https://img.shields.io/badge/Tests-35%20Passing-10b981?logo=checkmarx&logoColor=white)](tests/test_backend.py)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Predictive Filter Health Monitoring for Smart Water Purifiers**  
+> **Predictive Filter Health Monitoring for Smart Water Purifiers · Stage 3 Prototype**  
 > An edge-to-cloud machine learning system that diagnoses RO membrane health, detects early scaling, and enforces deterministic safety guardrails on drinking water quality.
 >
 > 🌐 **Live Public Demo:** [https://c48cae0c1101b2.lhr.life](https://c48cae0c1101b2.lhr.life)  
@@ -43,10 +43,21 @@ Aqua-Swachh monitors the water journey across critical checkpoints in the filtra
 
 | Sensor Channel | Hardware Component | Interface | Measurement Range | Role in Diagnostics |
 | :--- | :--- | :--- | :--- | :--- |
-| **Feed TDS (TDS-1)** | Xcluma Analog TDS V1.0 | GPIO 1 (ADC1) | $0 - 1500\text{ ppm}$ | Baseline feed mineral concentration |
-| **Permeate TDS (TDS-2)** | Xcluma Analog TDS V1.0 | GPIO 2 (ADC1) | $0 - 500\text{ ppm}$ | Purified permeate solute concentration |
+| **Feed TDS (TDS Sensor 1)** | Xcluma Analog TDS V1.0 | GPIO 1 (ADC1) | $0 - 2.3\text{ V}$ analog (≈ $0 - 1000\text{ ppm}$) | Baseline feed mineral concentration |
+| **Permeate TDS (TDS Sensor 2)** | Xcluma Analog TDS V1.0 | GPIO 2 (ADC1) | $0 - 2.3\text{ V}$ analog | Purified permeate solute concentration |
 | **Water Temperature** | Dallas DS18B20 1-Wire | GPIO 4 | $-10 - 85^\circ\text{C}$ | Conductivity normalization to 25°C baseline |
-| **Permeate Flow Rate** | YF-S201 1/2" Hall Turbine | GPIO 5 (ISR) | $0.2 - 10\text{ L/min}$ | Detects particulate head-loss & flow choking |
+| **Permeate Flow Rate** *(optional, not fitted yet)* | YF-S201 1/2" Hall Turbine | GPIO 5 (ISR) | $0.2 - 10\text{ L/min}$ | Detects particulate head-loss & flow choking |
+
+> **Current hardware build:** the TDS probes report **raw voltage (V)**, and **no flow meter is fitted**.
+> Voltage is converted to ppm on the PC side (see below), and every part of the pipeline treats `flow_rate` as optional.
+
+### Probe Voltage → TDS (ppm)
+
+The analog TDS boards output a voltage. `model/sensor_calibration.py` converts it with the Gravity/DFRobot reference curve:
+
+$$V_{25} = \frac{V}{1 + 0.02\,(T - 25)}, \qquad \text{TDS} = \left(133.42\,V_{25}^3 - 255.86\,V_{25}^2 + 857.39\,V_{25}\right) \times 0.5 \times K$$
+
+`K` is each probe's calibration factor (default `1.0` = uncalibrated). Calibrate by dipping a probe in a known standard (e.g. 342 ppm NaCl) and setting `K = known_ppm / measured_ppm`. K can be passed to the API, the dashboard, and the serial logger without reflashing the ESP32.
 
 ---
 
@@ -70,13 +81,25 @@ $$\text{Index} = Q \times \max(\eta, 0)$$
 
 ## 🎯 Model Benchmarks & Evaluation
 
-We benchmarked three model tiers using stratified 5-fold cross-validation on 1,500 physics-grounded operational samples (`model/train.py`):
+We benchmarked three model tiers using stratified 5-fold cross-validation on 1,500 **synthetic**, physics-grounded operational samples (`model/train.py`). Two variants are trained on the same split:
+
+**Full model** — TDS ×2 + temperature + flow (`random_forest_filter_model.joblib`):
 
 | Model Architecture | Cross-Val F1 (Macro) | Test Accuracy | Role in Pipeline |
 | :--- | :---: | :---: | :--- |
 | **Dummy Classifier** (Majority Class) | $0.2366$ | $55.0\%$ | Baseline lower bound |
-| **Logistic Regression** (Linear Baseline) | $0.9962 \pm 0.007$ | $99.7\%$ | Linear benchmark comparison |
-| **Random Forest Classifier** (Primary) | **$1.0000 \pm 0.000$** | **$100.0\%$** | **Primary production model** (100 estimators) |
+| **Logistic Regression** (Linear Baseline) | $0.9962 \pm 0.008$ | $99.7\%$ | Linear benchmark comparison |
+| **Random Forest Classifier** (Primary) | **$1.0000 \pm 0.000$** | **$100.0\%$** | Used when a flow reading is present |
+
+**No-flow model** — TDS ×2 + temperature only (`random_forest_filter_model_no_flow.joblib`):
+
+| Model Architecture | Cross-Val F1 (Macro) | Test Accuracy | Role in Pipeline |
+| :--- | :---: | :---: | :--- |
+| **Dummy Classifier** (Majority Class) | $0.2366$ | $55.0\%$ | Baseline lower bound |
+| **Logistic Regression** (Linear Baseline) | $0.9473 \pm 0.013$ | $95.0\%$ | Linear benchmark comparison |
+| **Random Forest Classifier** (Primary) | **$0.9468 \pm 0.013$** | **$95.0\%$** | **Used for the current hardware (no flow meter)** |
+
+The no-flow model is selected automatically whenever `flow_rate` is missing. Its lower score is expected: without flow it cannot tell flow-choke failures apart from early scaling.
 
 ### Three Diagnostic States:
 * 🟢 **NORMAL:** Salt rejection $\eta > 88\%$, nominal permeate flow ($1.5 - 2.2\text{ L/min}$). Water quality is optimal.
@@ -91,6 +114,8 @@ In consumer drinking water safety, statistical AI should never have unchecked au
 
 $$\text{Trigger Condition} = (\text{TDS}_{out} \ge 250\text{ ppm}) \lor (\eta < 55\%) \lor (Q < 0.40\text{ L/min})$$
 
+*(The flow condition is only evaluated when a flow reading exists.)*
+
 *If any trigger condition is met, the system **automatically overrides** the ML prediction to `Service Required`, alerts the user, and triggers an emergency indicator.*
 
 ---
@@ -101,23 +126,27 @@ $$\text{Trigger Condition} = (\text{TDS}_{out} \ge 250\text{ ppm}) \lor (\eta < 
 ├── web/
 │   ├── app.py                      # FastAPI REST API & static server
 │   └── static/
-│       └── index.html              # Clean modern web dashboard (Tailwind + Chart.js)
+│       ├── index.html              # Dashboard layout: Live Check, Batch Lab, ESP32 Node & Pinout, ML Methodology
+│       └── app.js                  # Dashboard logic: checks, simulation stories, charts, batch upload
 ├── model/
 │   ├── features.py                 # Physics feature extraction (η, Temp Comp, Delta TDS)
-│   ├── train.py                    # Model training, 5-fold cross validation, benchmark
+│   ├── sensor_calibration.py       # Probe voltage → ppm, K-value calibration, CSV header aliases
+│   ├── train.py                    # Trains full + no-flow models, 5-fold CV, benchmark
 │   └── saved_models/
-│       ├── random_forest_filter_model.joblib  # Serialized production model pipeline
+│       ├── random_forest_filter_model.joblib          # Full model (with flow)
+│       ├── random_forest_filter_model_no_flow.joblib  # No-flow model (TDS + temperature)
 │       └── metrics_summary.json    # Exported evaluation metrics & confusion matrix
 ├── data/
 │   ├── generate_dataset.py         # Physics-based synthetic dataset generator
-│   ├── data_logging_esp32.py       # USB serial bridge logger for physical ESP32
-│   └── sensor_data.csv             # 1,500 labeled benchmark records
+│   ├── data_logging_esp32.py       # USB serial bridge logger (voltage → ppm, flow optional)
+│   ├── real_sensor_readings.csv    # Real bench readings: raw TDS voltages + temperature (18 rows)
+│   └── sensor_data.csv             # 1,500 labeled synthetic benchmark records
 ├── firmware/
-│   └── esp32_sensor_node.ino       # C++ Arduino firmware for ESP32-S3 (ADC filtering + ISR)
+│   └── esp32_sensor_node.ino       # ESP32-S3 firmware: streams raw probe voltage (+ optional flow)
 ├── inference/
 │   └── predict.py                  # High-level inference engine + safety guardrails
 ├── tests/
-│   └── test_backend.py             # Automated 16-test backend verification suite
+│   └── test_backend.py             # Automated 35-test backend verification suite
 ├── demo.py                         # Interactive terminal test bench (5 scenarios)
 ├── run_dashboard.bat               # 1-Click Windows launcher (auto-recovers ports & venv)
 ├── stop_dashboard.bat              # 1-Click clean shutdown utility for Windows
@@ -172,17 +201,65 @@ python demo.py
 ```bash
 python -m unittest tests/test_backend.py -v
 ```
-*Runs all 16 verification tests across physics calculations, ML inference, safety guardrails, and live REST API endpoints.*
+*Runs all 35 verification tests across physics calculations, voltage conversion, ML inference (with and without flow), safety guardrails, and live REST API endpoints. The API tests need the server running on port 8000.*
 
 ---
 
 ## 🧪 Testing with Real Sensor Data
 
+### Real bench readings (bundled)
+
+`data/real_sensor_readings.csv` holds readings transcribed from the ESP32 Serial Monitor, as raw probe voltage:
+
+| Sample type | Readings | TDS Sensor 1 (avg) | TDS Sensor 2 (avg) | Temperature | → Feed / Permeate (K=1.0) | Salt rejection | Model output |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| Normal water | 8 | 1.213 V | 0.144 V | 24.2 – 24.8 °C | 456.8 / 60.0 ppm | 86.9 % | Monitor |
+| Water cooler water | 10 | 1.214 V | 0.150 V | 31.1 – 32.7 °C | 391.3 / 54.3 ppm | 86.1 % | Monitor |
+
+TDS Sensor 1 is treated as feed (`tds_in`) and TDS Sensor 2 as permeate (`tds_out`), as wired in the firmware. Treat these results as indicative only: the probes are not calibrated yet (K = 1.0) and there is no flow data. Both samples sit just under the 88 % "Normal" rejection boundary, so a small K correction could change the class.
+
+### Demo file with simulated flow
+
+`data/real_readings_with_simulated_flow.csv` contains the **same real voltages** plus **simulated** `flow_rate` values: healthy flow for Normal water, and progressive pre-filter clogging for Water cooler water. Every row is marked `flow_source = simulated`. It shows how the full model reacts to flow: 13 rows are Monitor (confidence 52.5–100%) and 5 are Service Required (72.5–92.5%), and the last row triggers the low-flow guardrail. The dashboard flags these values as simulated. They are not measurements.
+
+### Using the dashboard
+
 1. Open the **Batch Sensor Lab** tab in the web dashboard.
-2. Click **"Analyze Bundled Stage 2 Dataset (1,000 Rows)"** to instantly run the Random Forest model on 1,000 real-world sensor records without needing to hunt for files.
-3. Or drop any `.csv` file recorded from your purifier containing the columns:  
-   `tds_in, tds_out, temperature, flow_rate`
-4. Use the interactive table filters (`All`, `Normal`, `Monitor`, `Service`) to inspect individual predictions, confidence scores, and safety flags.
+2. Click **"Analyze My Real Readings (Voltage)"** to run the bundled bench readings, with a per-sample-type summary. You can set probe K-values first.
+3. Or drop any `.csv` file. Two formats are accepted, and `flow_rate` is optional in both:
+   * **ppm:** `tds_in, tds_out, temperature[, flow_rate]`
+   * **voltage:** `tds_in_voltage, tds_out_voltage, temperature[, flow_rate, sample_type, reading_no]`  
+     Spreadsheet headers such as `TDS Sensor 1 (V)`, `TDS Sensor 2 (V)`, `Temperature (°C)`, `Sample Type`, `Reading No.` are recognised automatically.
+4. On the **Live Diagnostics** tab, use the *Raw Probe Voltage Input* panel to diagnose a single Serial Monitor reading, or untick **sensor fitted** on the flow card to use the no-flow model.
+
+### API
+
+```bash
+# Single reading from raw voltage (flow optional, K-values optional)
+curl -X POST localhost:8000/api/predict-voltage -H 'Content-Type: application/json' \
+     -d '{"tds_in_voltage": 1.214, "tds_out_voltage": 0.144, "temperature": 24.81}'
+
+# Single reading in ppm without flow
+curl -X POST localhost:8000/api/predict -H 'Content-Type: application/json' \
+     -d '{"tds_in": 453.2, "tds_out": 59.5, "temperature": 24.81}'
+
+# Bundled real readings / CSV upload with calibration
+curl 'localhost:8000/api/load-real-data?k_in=1.0&k_out=1.0'
+curl -F file=@my_readings.csv 'localhost:8000/api/upload-csv?k_in=1.05&k_out=0.98'
+```
+
+### Live logging from the ESP32
+
+```bash
+pip install pyserial
+python data/data_logging_esp32.py --port /dev/cu.usbserial-XXXX --sample-type "Normal water" --k-in 1.0 --k-out 1.0
+```
+
+The logger accepts `tds1_V,tds2_V,temp_C[,flow]` lines (the format the firmware prints). It also accepts free-text lines such as `TDS1: 1.214 V  TDS2: 0.144 V  Temp: 24.81 C`. It writes voltage and converted ppm to `data/esp32_live_log.csv` and prints a live diagnosis.
+
+### Getting labeled real data for training
+
+The models are still trained only on the synthetic dataset, because real readings have no ground-truth filter condition. To train on real data, log readings from cartridges whose state you know (new, mid-life, or due for service). Add a `filter_status` column, calibrate the probes, and fit a flow meter if you want clogging detection.
 
 ---
 

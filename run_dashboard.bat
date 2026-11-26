@@ -41,7 +41,10 @@ if %errorlevel% neq 0 (
 )
 
 rem 5. Ensure model weights are present
-if not exist "%~dp0model\saved_models\random_forest_filter_model.joblib" (
+set NEED_TRAIN=0
+if not exist "%~dp0model\saved_models\random_forest_filter_model.joblib" set NEED_TRAIN=1
+if not exist "%~dp0model\saved_models\random_forest_filter_model_no_flow.joblib" set NEED_TRAIN=1
+if "%NEED_TRAIN%"=="1" (
     echo [INFO] Generating dataset and training ML model...
     "%PYTHON_EXE%" -u "%~dp0data\generate_dataset.py"
     "%PYTHON_EXE%" -u -m model.train
